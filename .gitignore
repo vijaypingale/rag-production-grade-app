@@ -5,3 +5,13 @@ __pycache__/
 .chromadb/
 .idea/
 .vscode/
+*.log
+.pytest_cache/
+vector_db/faiss_index/*.faiss
+vector_db/faiss_index/*.pkl
+data/documents/
+vector_db/metadata/
+.DS_Store
+*.egg-info/
+dist/
+build/
