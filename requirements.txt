@@ -1,0 +1,44 @@
+# =========================================================
+# Core LangChain stack
+# =========================================================
+langchain
+langchain-community
+langchain-text-splitters
+langchain-experimental         # SemanticChunker lives here
+
+# =========================================================
+# Embedding providers
+# =========================================================
+langchain-aws                  # AWS Bedrock embeddings (primary)
+langchain-openai               # OpenAI embeddings (legacy fallback)
+boto3                          # transitive but pinned for clarity
+
+# =========================================================
+# Document loaders
+# =========================================================
+pymupdf                        # PDF (PyMuPDFLoader)
+docx2txt                       # DOCX  (Docx2txtLoader)
+# unstructured[md,html]         # uncomment to enable HTML / Markdown loaders
+# beautifulsoup4                # required by BSHTMLLoader
+
+# =========================================================
+# Vector store
+# =========================================================
+faiss-cpu                      # in-process FAISS (swap for faiss-gpu on GPU hosts)
+# opensearch-py                  # uncomment to enable OpenSearch vector store
+
+# =========================================================
+# Web framework
+# =========================================================
+fastapi
+uvicorn
+python-multipart               # required for FastAPI UploadFile
+pydantic                       # request schemas
+
+# =========================================================
+# Observability / utilities
+# =========================================================
+structlog
+tiktoken
+python-dotenv
+numpy
