@@ -57,7 +57,9 @@ from app.embeddings.embedding_generator import (
     generate_embeddings,
     get_embedding_model,
 )
-from app.vectorstores.faiss_store import upsert_chunks
+
+from app.vectorstores.faiss_store import upsert_chunks as upsert_dense_chunks
+from app.retrieval.bm25_retriever  import upsert_chunks as upsert_sparse_chunks
 
 from app.utils.logger import logger
 
@@ -256,7 +258,19 @@ async def process_uploaded_file_in_memory(upload_file):
 
         store_start = time.perf_counter()
 
-        store_result = upsert_chunks(chunks)
+        # ---- Dense vector index ---------------------------
+        store_result = upsert_dense_chunks(chunks)
+
+        # ---- Sparse BM25 index (for hybrid retrieval) -----
+        # We maintain BOTH indexes in lockstep so hybrid
+        # retrieval mode is always available.
+        bm25_result = upsert_sparse_chunks(chunks)
+
+        logger.info(
+            "bm25_index_updated_alongside_faiss",
+            doc_id=doc_id,
+            bm25_total_documents=bm25_result.get("store_total_documents"),
+        )
 
         store_time = time.perf_counter() - store_start
 
@@ -378,7 +392,8 @@ def process_uploaded_pdf(file_path: str):
 
     embeddings = generate_embeddings(chunks)
 
-    store_result = upsert_chunks(chunks)
+    store_result = upsert_dense_chunks(chunks)
+    upsert_sparse_chunks(chunks)
 
     logger.info(
         "ingestion_disk_pipeline_completed",

@@ -62,6 +62,18 @@ class SearchRequest(BaseModel):
         examples=[{"doc_type": "pdf"}],
     )
 
+    # ---- ADD THIS NEW FIELD ------------------------------
+    mode: Optional[str] = Field(
+        default=None,
+        description=(
+            "Retrieval mode: 'dense' (vector only), 'hybrid' "
+            "(BM25 + dense via RRF), 'mmr' (diverse vector), "
+            "or 'hybrid_rerank' (hybrid + Cohere Rerank v3). "
+            "Defaults to settings.RETRIEVAL_MODE."
+        ),
+        examples=["hybrid_rerank"],
+    )
+
 
 # ============================================================================
 # Search endpoint
@@ -98,6 +110,7 @@ async def search(request: SearchRequest):
             query=request.query,
             top_k=request.top_k,
             metadata_filter=request.metadata_filter,
+            mode=request.mode, 
         )
 
     except FileNotFoundError as ex:

@@ -312,3 +312,97 @@ def get_index_stats():
         "total_vectors": vector_store.index.ntotal,
         "dimension": vector_store.index.d,
     }
+
+# =========================================================
+# Public API -- MMR (Maximal Marginal Relevance) search
+# =========================================================
+
+def mmr_search(
+    query: str,
+    top_k: int = None,
+    metadata_filter: dict = None,
+    lambda_mult: float = 0.5,
+    fetch_k: int = 20,
+):
+    """
+    Run Maximal Marginal Relevance search against FAISS.
+
+    Why MMR matters in RAG:
+    -----------------------
+    Plain top-K similarity often returns near-duplicate chunks
+    (e.g. the same paragraph repeated across versions of a doc).
+    Feeding duplicates to the LLM wastes context budget and
+    biases the answer. MMR re-ranks the top fetch_k candidates
+    to maximize:
+
+        lambda_mult * relevance  -  (1 - lambda_mult) * redundancy
+
+    so the returned set is BOTH relevant AND diverse.
+
+    Args:
+        query           : natural language query
+        top_k           : final number of chunks to return
+        metadata_filter : optional pre-filter
+        lambda_mult     : 0..1, 1=pure relevance, 0=pure diversity
+        fetch_k         : candidate pool size before MMR re-rank
+
+    Returns:
+        List[dict]: same shape as similarity_search()
+    """
+
+    from app.config.settings import RETRIEVAL_TOP_K
+
+    if top_k is None:
+        top_k = RETRIEVAL_TOP_K
+
+    if not _index_exists():
+        raise FileNotFoundError(
+            f"No FAISS index found at {FAISS_INDEX_DIR}. Ingest first."
+        )
+
+    embedding_model = get_embedding_model()
+
+    vector_store = FAISS.load_local(
+        folder_path=FAISS_INDEX_DIR,
+        embeddings=embedding_model,
+        index_name=FAISS_INDEX_NAME,
+        allow_dangerous_deserialization=True,
+    )
+
+    logger.info(
+        "faiss_mmr_search_started",
+        query_preview=query[:200],
+        top_k=top_k,
+        fetch_k=fetch_k,
+        lambda_mult=lambda_mult,
+        metadata_filter=metadata_filter,
+    )
+
+    # LangChain FAISS exposes MMR natively.
+    # Note: MMR returns Documents WITHOUT scores (the
+    # underlying algorithm picks based on the embedding
+    # geometry, not on the raw similarity score).
+    docs = vector_store.max_marginal_relevance_search(
+        query=query,
+        k=top_k,
+        fetch_k=fetch_k,
+        lambda_mult=lambda_mult,
+        filter=metadata_filter,
+    )
+
+    results = [
+        {
+            "content":    doc.page_content,
+            "metadata":   doc.metadata,
+            "similarity": None,   # MMR doesn't expose per-doc score
+        }
+        for doc in docs
+    ]
+
+    logger.info(
+        "faiss_mmr_search_completed",
+        query_preview=query[:200],
+        results_returned=len(results),
+    )
+
+    return results

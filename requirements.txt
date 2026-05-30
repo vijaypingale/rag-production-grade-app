@@ -42,3 +42,6 @@ structlog
 tiktoken
 python-dotenv
 numpy
+
+rank-bm25                      # BM25 sparse retriever (for hybrid retrieval)
+cohere                         # Cohere Rerank v3 reranker client

@@ -154,3 +154,62 @@ FAISS_INDEX_NAME = "rag_index"
 # if a reranker stage follows.
 
 RETRIEVAL_TOP_K = 5
+
+# =========================================================
+# Retrieval Mode Configuration
+# =========================================================
+# Selects how the retrieval service answers a query:
+#   "dense"  : FAISS vector search only         (current default)
+#   "hybrid" : BM25 + dense fused via RRF       (production recommended)
+#   "mmr"    : FAISS Maximal Marginal Relevance for diversity
+#
+# Override at request time via the API, or globally via env var.
+
+RETRIEVAL_MODE = os.getenv("RETRIEVAL_MODE", "hybrid")
+
+# MMR diversity-vs-relevance balance.
+# 1.0 = pure relevance (same as dense), 0.0 = pure diversity.
+# 0.5 is the standard balanced default.
+
+MMR_LAMBDA = 0.5
+
+# How many candidates to pull from each retriever in hybrid
+# mode before RRF fusion. Higher = better recall, slower.
+
+HYBRID_FETCH_K = 20
+
+# =========================================================
+# Cohere Rerank Configuration
+# =========================================================
+# Cohere Rerank v3 is the most widely deployed hosted
+# cross-encoder reranker in production RAG today. It re-
+# scores retrieval candidates by reading the query AND
+# each candidate document together in one transformer pass,
+# producing significantly more accurate rankings than the
+# bi-encoder retrieval stage alone.
+#
+# Model choices:
+#   "rerank-v3.5"                  -- newest, best quality, multilingual
+#   "rerank-multilingual-v3.0"     -- multilingual, stable
+#   "rerank-english-v3.0"          -- English-only, slightly faster
+#
+# Pricing: $2 per 1,000 search units (1 unit ≈ 1 query + 100 docs)
+# Free tier: 100 calls/minute, no credit card required.
+
+COHERE_RERANK_MODEL = os.getenv(
+    "COHERE_RERANK_MODEL",
+    "rerank-v3.5"
+)
+
+# How many candidates to PULL from the retriever before
+# reranking. Higher = better recall going into the reranker,
+# more API cost. 50 is the sweet spot in most production
+# RAG systems.
+
+RERANK_FETCH_K = 50
+
+# How many candidates to KEEP after reranking. This is
+# what ultimately gets passed to the LLM (or returned to
+# the caller in our current prototype).
+
+RERANK_TOP_K = 5
