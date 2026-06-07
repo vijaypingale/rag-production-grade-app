@@ -37,7 +37,7 @@ from app.utils.logger import logger
 # =========================================================
 # Centralized so the API layer can validate uploads up front.
 
-SUPPORTED_EXTENSIONS = {".pdf", ".docx"}
+SUPPORTED_EXTENSIONS = {".pdf", ".docx"}  # edited by Claude Code on 2026-06-07
 
 
 def load_document(file_path: str):

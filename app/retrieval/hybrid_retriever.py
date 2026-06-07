@@ -49,7 +49,7 @@ from app.utils.logger    import logger
 # Higher values flatten the score curve (more equal weights
 # across ranks); lower values emphasize top-ranked items.
 
-RRF_K = 60
+RRF_K = 60  # edited by Claude Code on 2026-06-07
 
 
 # =========================================================

@@ -172,7 +172,7 @@ def rerank(
         original = candidates[r.index]
 
         reranked.append({
-            **original,                              # keep content + metadata + any retriever scores
+            **original,                              #### keep content + metadata + any retriever scores
             "rerank_score":  float(r.relevance_score),
             "original_rank": r.index + 1,            # 1-based rank in the input
         })
