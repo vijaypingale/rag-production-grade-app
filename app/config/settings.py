@@ -213,3 +213,137 @@ RERANK_FETCH_K = 50
 # the caller in our current prototype).
 
 RERANK_TOP_K = 5
+
+
+# =========================================================
+# Grounding Configuration
+# =========================================================
+# Minimum rerank score required for the top chunk before
+# the generation layer is allowed to produce an answer.
+#
+# If the highest rerank score across all retrieved chunks
+# is below this threshold, the system returns a canned
+# "I don't have enough information" response instead of
+# calling the LLM at all.
+#
+# Why 0.20:
+#   Cohere Rerank v3 scores range roughly 0.0 - 1.0.
+#   Empirically, scores below 0.20 indicate the retrieved
+#   content is weakly related to the query — generating an
+#   answer from such content risks hallucination.
+#
+# Tune upward (e.g. 0.30) for stricter grounding;
+# tune downward (e.g. 0.10) if you see too many false
+# "I don't know" responses on valid queries.
+
+GROUNDING_THRESHOLD = float(os.getenv("GROUNDING_THRESHOLD", "0.05"))
+# NOTE: Initial estimate was 0.20 but rerank-v3.5 scores for relevant chunks
+# in this corpus land in the 0.05 - 0.40 range. Lowered to 0.05 to avoid
+# false "I don't know" responses. Tune upward after observing score
+# distributions across more queries (Section 12 — quality dashboard).
+
+
+# =========================================================
+# LLM Provider Configuration
+# =========================================================
+# Selects which LLM backend handles generation.
+# Currently supported: "openai" | "bedrock"
+#
+# "openai"  : uses ChatOpenAI (langchain-openai)
+# "bedrock" : uses ChatBedrock (langchain-aws) — requires
+#             valid AWS credentials and region in .env
+#
+# Override via env var: LLM_PROVIDER=bedrock
+
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "openai")
+
+
+# =========================================================
+# OpenAI LLM Model Configuration
+# =========================================================
+# gpt-4o-mini is the recommended default:
+#   - 128k context window
+#   - Strong instruction-following + citation adherence
+#   - ~10x cheaper than gpt-4o for the same task quality
+#     on well-structured RAG prompts
+#
+# Other options:
+#   "gpt-4o"          — highest quality, higher cost
+#   "gpt-3.5-turbo"   — faster, cheapest, weaker reasoning
+
+LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini")
+
+
+# =========================================================
+# AWS Bedrock LLM Configuration (used when LLM_PROVIDER=bedrock)
+# =========================================================
+# Model IDs follow Bedrock's ARN-style naming.
+# Uncomment and set in .env to activate Bedrock generation.
+#
+# Recommended models:
+#   "anthropic.claude-3-5-sonnet-20241022-v2:0"  — best quality
+#   "anthropic.claude-3-haiku-20240307-v1:0"     — fast + cheap
+#   "amazon.nova-pro-v1:0"                        — Amazon native
+
+BEDROCK_LLM_MODEL = os.getenv(
+    "BEDROCK_LLM_MODEL",
+    "anthropic.claude-3-5-sonnet-20241022-v2:0"
+)
+
+BEDROCK_LLM_REGION = os.getenv("AWS_REGION", "us-east-1")
+
+
+# =========================================================
+# LLM Token Budget
+# =========================================================
+# MAX_CONTEXT_TOKENS: hard cap on the assembled context
+# string passed to the LLM. This is the same value used
+# by the context assembler (Section 7).
+#
+# Budget breakdown for gpt-4o-mini (128k window):
+#   ~300  tokens  — system prompt
+#   ~100  tokens  — user question
+#   6000  tokens  — assembled context  ← this constant
+#   ~1500 tokens  — answer headroom
+#   ------
+#   ~7900 tokens total — well within the 128k window
+#
+# If you switch to a model with a smaller context window
+# (e.g. gpt-3.5-turbo at 16k), lower this value accordingly.
+
+MAX_CONTEXT_TOKENS = int(os.getenv("MAX_CONTEXT_TOKENS", "6000"))
+
+# Maximum tokens the LLM is allowed to generate in its answer.
+# 1024 is a safe default — long enough for a thorough answer,
+# short enough to keep costs predictable.
+
+MAX_COMPLETION_TOKENS = int(os.getenv("MAX_COMPLETION_TOKENS", "1024"))
+
+
+# =========================================================
+# LLM Sampling Configuration
+# =========================================================
+# Temperature controls answer randomness.
+# 0.0 = fully deterministic (best for factual RAG answers)
+# Higher values introduce creativity — not appropriate for
+# grounded Q&A where we want the LLM to stick to context.
+
+LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.0"))
+
+
+# =========================================================
+# LLM Retry & Timeout Configuration
+# =========================================================
+# Production LLM calls can fail transiently (rate limits,
+# network blips, provider maintenance windows). We retry
+# with exponential backoff before surfacing a 503 to the
+# caller.
+#
+# LLM_TIMEOUT_SECONDS : per-attempt wall-clock timeout.
+#                       60s is generous for gpt-4o-mini;
+#                       lower to 30s for latency-sensitive apps.
+# LLM_MAX_RETRIES     : attempts before giving up.
+#                       3 = initial + 2 retries.
+
+LLM_TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
+LLM_MAX_RETRIES     = int(os.getenv("LLM_MAX_RETRIES", "3"))

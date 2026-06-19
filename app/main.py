@@ -30,6 +30,7 @@ from fastapi import FastAPI
 
 from app.api.ingestion_api import router as ingestion_router
 from app.api.retrieval_api import router as retrieval_router
+from app.api.ask_api       import router as ask_router
 
 from app.utils.logger import logger
 
@@ -62,6 +63,11 @@ app.include_router(
 
 app.include_router(
     retrieval_router,
+    prefix="/api/v1",
+)
+
+app.include_router(
+    ask_router,
     prefix="/api/v1",
 )
 
