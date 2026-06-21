@@ -1,0 +1,38 @@
+{
+  "description": "Gold-standard evaluation set for the WISeR RAG app. Each item has a question and a reference (ground-truth) answer. RAGAS grades the live pipeline's answer + retrieved context against these. Keep references concise and strictly factual to the source document (wiser-provider-and-supplier-guide_v1.pdf).",
+  "version": "1.0",
+  "samples": [
+    {
+      "question": "What is the purpose of the WISeR model?",
+      "reference": "The WISeR (Wasteful and Inappropriate Service Reduction) model is a CMS initiative that tests technology-enhanced prior authorization and pre-payment medical review for select items and services, aiming to reduce clinically inappropriate or low-value care, protect beneficiaries, and safeguard Medicare funds while preserving access to appropriate services."
+    },
+    {
+      "question": "What is the purpose of the Provider and Supplier Operational Guide?",
+      "reference": "The Provider and Supplier Operational Guide provides a practical overview of the prior authorization submission and determination process for Medicare-enrolled providers and suppliers that furnish and bill items and services included in the WISeR model, and it explains the pre-payment medical review process triggered when claims are submitted without first obtaining prior authorization."
+    },
+    {
+      "question": "What are the statutory Medicare requirements for a service to be covered?",
+      "reference": "For a service or item to be covered by Medicare it must be eligible for a defined Medicare benefit category and be reasonable and necessary for the diagnosis or treatment of illness or injury or to improve the functioning of a malformed body member."
+    },
+    {
+      "question": "What happens if a claim is submitted without obtaining prior authorization?",
+      "reference": "If a claim for an item or service included in the WISeR model is submitted without first obtaining prior authorization, it triggers a pre-payment medical review process."
+    },
+    {
+      "question": "Does the WISeR model change existing Medicare coverage or payment policies?",
+      "reference": "No. The WISeR model does not change existing Original Medicare coverage or payment policies; it tests prior authorization and pre-payment medical review without altering what Medicare covers or how it pays."
+    },
+    {
+      "question": "Who needs to follow the WISeR prior authorization process?",
+      "reference": "Medicare-enrolled providers and suppliers that furnish and bill the items and services included in the WISeR model, in the states where the WISeR model is being tested, must follow the prior authorization process."
+    },
+    {
+      "question": "What is one example of a procedure code covered under the WISeR model?",
+      "reference": "Procedure code 0275T, which covers percutaneous laminotomy/laminectomy for decompression of neural elements, is one example of a code included in the WISeR model."
+    },
+    {
+      "question": "List all procedure codes covered under the WISeR model.",
+      "reference": "The WISeR model covers roughly 395 distinct procedure codes spanning a large appendix table, including CPT codes such as 0275T, 22554, 22585, 54400, 54401, 54405, anesthesia codes 01942 and 01992, HCPCS codes such as G0276, and an extensive range of Q-codes (e.g. Q4101 through Q4382) among many others."
+    }
+  ]
+}

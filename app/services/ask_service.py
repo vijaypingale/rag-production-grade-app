@@ -130,6 +130,10 @@ class AskResult:
     orphan_citations:     list[int]   = field(default_factory=list)
     trustworthy:          bool        = False
 
+    # Raw retrieved chunk texts (used by Section 10 eval & observability).
+    # Not exposed over the HTTP API — internal/eval use only.
+    retrieved_contexts:   list[str]   = field(default_factory=list)
+
 
 # =========================================================
 # Ungrounded response constant
@@ -435,4 +439,5 @@ def ask(
         citations_valid=citation_audit.all_valid,
         orphan_citations=citation_audit.orphan_numbers,
         trustworthy=trustworthy,
+        retrieved_contexts=[c.get("content", "") for c in reranked_chunks],
     )

@@ -1,17 +1,28 @@
 # =========================================================
 # Core LangChain stack
 # =========================================================
-langchain
-langchain-community
-langchain-text-splitters
-langchain-experimental         # SemanticChunker lives here
+# Pinned to the stable 0.3.x line (NOT 1.x). This is the version
+# RAGAS 0.2.x is built and tested against — a common enterprise
+# choice for teams that standardized on LangChain ~1-2 years ago.
+# Do NOT bump to langchain 1.x without re-validating RAGAS compat.
+langchain==0.3.30
+langchain-core==0.3.86
+langchain-community==0.3.31
+langchain-text-splitters==0.3.11
+langchain-experimental==0.3.4  # SemanticChunker lives here
 
 # =========================================================
 # Embedding providers
 # =========================================================
-langchain-aws                  # AWS Bedrock embeddings (primary)
-langchain-openai               # OpenAI embeddings (legacy fallback)
+langchain-aws==0.2.35          # AWS Bedrock embeddings (primary)
+langchain-openai==0.2.14       # OpenAI embeddings + ChatOpenAI
 boto3                          # transitive but pinned for clarity
+
+# =========================================================
+# Evaluation (Section 10)
+# =========================================================
+ragas==0.2.15                  # offline RAG evaluation (faithfulness, etc.)
+datasets                       # RAGAS EvaluationDataset backing
 
 # =========================================================
 # Document loaders
@@ -45,3 +56,8 @@ numpy
 
 rank-bm25                      # BM25 sparse retriever (for hybrid retrieval)
 cohere                         # Cohere Rerank v3 reranker client
+
+# =========================================================
+# Testing
+# =========================================================
+pytest                         # unit tests (deterministic components)
