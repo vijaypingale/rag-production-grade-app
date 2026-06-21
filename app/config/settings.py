@@ -347,3 +347,37 @@ LLM_TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.0"))
 
 LLM_TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
 LLM_MAX_RETRIES     = int(os.getenv("LLM_MAX_RETRIES", "3"))
+
+
+# =========================================================
+# Faithfulness / Hallucination Control (Section 9)
+# =========================================================
+# AFTER the LLM generates an answer, we verify it is actually
+# supported by the retrieved context. This is the "verify after"
+# layer of the three-tier hallucination defense:
+#   1. Grounding gate    (before generation) — GROUNDING_THRESHOLD above
+#   2. Faithfulness check (after generation) — this block
+#   3. Citation enforcement (programmatic)   — no config needed
+#
+# Technique (industry standard):
+#   Decompose the answer into atomic claims, then use an LLM-as-judge
+#   (NLI-style) to classify each claim against the context as
+#   supported / unsupported / unverifiable. The faithfulness score is
+#   supported_claims / total_claims.
+#
+# FAITHFULNESS_CHECK_ENABLED:
+#   The check costs one extra LLM call (added latency + cost). Enable in
+#   production / regulated environments; disable for latency-sensitive or
+#   cost-sensitive paths. Toggle via env: FAITHFULNESS_CHECK_ENABLED=false
+#
+# FAITHFULNESS_THRESHOLD:
+#   Minimum score for an answer to be considered trustworthy.
+#   Industry guidance: >=0.85 baseline for regulated environments,
+#   >0.9 as a stricter target. Below threshold => answer is flagged
+#   as low-faithfulness (caller decides whether to suppress).
+
+FAITHFULNESS_CHECK_ENABLED = os.getenv(
+    "FAITHFULNESS_CHECK_ENABLED", "true"
+).lower() == "true"
+
+FAITHFULNESS_THRESHOLD = float(os.getenv("FAITHFULNESS_THRESHOLD", "0.85"))

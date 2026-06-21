@@ -408,6 +408,42 @@ def generate_answer(
     _raise_typed_error(last_exc)
 
 
+def run_judge(system_prompt: str, user_prompt: str) -> str:
+    """
+    Run a single, lightweight LLM call for "judge"-style tasks
+    (e.g. the faithfulness check in Section 9).
+
+    Why this exists separately from generate_answer():
+        generate_answer() returns a rich LLMResponse and is tuned for
+        the main answer. Judge calls just need the raw text back. This
+        helper reuses the SAME provider factory (_get_llm), so the
+        OpenAI/Bedrock switch stays in one place — callers never branch
+        on the provider.
+
+    No retry/backoff here by design: a judge call is best-effort. If it
+    fails, the caller treats faithfulness as "unchecked" rather than
+    failing the whole user request over a secondary verification step.
+
+    Args:
+        system_prompt : instructions for the judge
+        user_prompt   : the content to judge
+
+    Returns:
+        The judge's raw text response.
+
+    Raises:
+        Propagates provider exceptions — callers should catch broadly
+        and degrade gracefully (mark faithfulness as unchecked).
+    """
+    llm = _get_llm()
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=user_prompt),
+    ]
+    response = llm.invoke(messages)
+    return response.content
+
+
 def _raise_typed_error(exc: Exception) -> None:
     """
     Convert a raw provider exception into our typed error hierarchy.

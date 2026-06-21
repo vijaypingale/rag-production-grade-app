@@ -152,6 +152,14 @@ class AskResponse(BaseModel):
     chunks_used:       int
     latency:           LatencyResponse
 
+    # Section 9 — post-generation verification
+    trustworthy:          bool       = False
+    citations_valid:      bool       = True
+    orphan_citations:     List[int]  = []
+    faithfulness_checked: bool       = False
+    faithfulness_score:   float      = 0.0
+    faithfulness_passed:  bool       = False
+
 
 # ============================================================================
 # Conversion helper
@@ -184,6 +192,12 @@ def _build_response(result: AskResult) -> AskResponse:
             generation_ms=result.latency.generation_ms,
             total_ms=result.latency.total_ms,
         ),
+        trustworthy=result.trustworthy,
+        citations_valid=result.citations_valid,
+        orphan_citations=result.orphan_citations,
+        faithfulness_checked=result.faithfulness_checked,
+        faithfulness_score=result.faithfulness_score,
+        faithfulness_passed=result.faithfulness_passed,
     )
 
 

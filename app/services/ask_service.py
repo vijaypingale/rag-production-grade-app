@@ -37,6 +37,12 @@ from app.generation.llm               import (
     LLMQuotaError,
     LLMProviderError,
 )
+from app.generation.grounding         import (
+    enforce_citations,
+    check_faithfulness,
+    CitationAudit,
+    FaithfulnessResult,
+)
 from app.config.settings import (
     RERANK_FETCH_K,
     RERANK_TOP_K,
@@ -44,6 +50,8 @@ from app.config.settings import (
     MAX_CONTEXT_TOKENS,
     LLM_MODEL,
     GROUNDING_THRESHOLD,
+    FAITHFULNESS_CHECK_ENABLED,
+    FAITHFULNESS_THRESHOLD,
 )
 from app.utils.logger import logger
 
@@ -91,8 +99,17 @@ class AskResult:
         completion_tokens: tokens in the generated answer
         total_tokens     : prompt + completion
         chunks_used      : number of context chunks passed to the LLM
-        grounded         : True if the grounding gate passed
+        grounded         : True if the grounding gate passed (pre-generation)
         latency          : LatencyBreakdown for observability
+
+        --- Section 9: post-generation verification ---
+        faithfulness_checked   : did the faithfulness check run?
+        faithfulness_score     : supported_claims / verifiable_claims (0.0–1.0)
+        faithfulness_passed    : score >= FAITHFULNESS_THRESHOLD
+        citations_valid        : True if every [N] in the answer maps to a chunk
+        orphan_citations       : [N] numbers in the answer with no source chunk
+        trustworthy            : overall verdict — grounded AND citations_valid
+                                 AND (faithfulness passed OR not checked)
     """
     answer:            str
     citations:         list[CitationEntry]
@@ -104,6 +121,14 @@ class AskResult:
     chunks_used:       int
     grounded:          bool
     latency:           LatencyBreakdown
+
+    # Section 9 — verification (defaults keep the ungrounded-path return simple)
+    faithfulness_checked: bool        = False
+    faithfulness_score:   float       = 0.0
+    faithfulness_passed:  bool        = False
+    citations_valid:      bool        = True
+    orphan_citations:     list[int]   = field(default_factory=list)
+    trustworthy:          bool        = False
 
 
 # =========================================================
@@ -320,7 +345,40 @@ def ask(
     )
 
     # =====================================================
-    # Stage 5: Build structured response
+    # Stage 5: Post-generation verification (Section 9)
+    # =====================================================
+    # Two checks run AFTER the answer is produced:
+    #   (a) Citation enforcement — programmatic, always runs, ~free
+    #   (b) Faithfulness check   — LLM-as-judge, optional (costs a call)
+    # Neither one fails the request; they ANNOTATE the answer with a
+    # trustworthiness verdict the caller/UI can act on.
+    # =====================================================
+
+    citation_audit: CitationAudit = enforce_citations(
+        answer=llm_response.answer,
+        citation_map=assembled["citation_map"],
+    )
+
+    if FAITHFULNESS_CHECK_ENABLED:
+        faithfulness: FaithfulnessResult = check_faithfulness(
+            answer=llm_response.answer,
+            context=assembled["context"],
+        )
+    else:
+        # Check disabled — leave an unchecked result.
+        faithfulness = FaithfulnessResult(
+            checked=False, score=0.0, passed=False,
+            total_claims=0, supported_claims=0,
+        )
+
+    # Overall trustworthiness verdict.
+    # If the faithfulness check did not run, we don't penalise the answer
+    # for it (passed-or-unchecked), but citation validity always counts.
+    faithfulness_ok = faithfulness.passed or not faithfulness.checked
+    trustworthy = citation_audit.all_valid and faithfulness_ok
+
+    # =====================================================
+    # Stage 6: Build structured response
     # =====================================================
 
     total_ms = round((time.perf_counter() - pipeline_start) * 1000, 2)
@@ -343,6 +401,12 @@ def ask(
         citations_count=len(citations),
         model_used=llm_response.model_used,
         total_tokens=llm_response.total_tokens,
+        faithfulness_checked=faithfulness.checked,
+        faithfulness_score=faithfulness.score,
+        faithfulness_passed=faithfulness.passed,
+        citations_valid=citation_audit.all_valid,
+        orphan_citations=citation_audit.orphan_numbers,
+        trustworthy=trustworthy,
         retrieval_ms=retrieval_ms,
         assembly_ms=assembly_ms,
         generation_ms=llm_response.latency_ms,
@@ -365,4 +429,10 @@ def ask(
             generation_ms=llm_response.latency_ms,
             total_ms=total_ms,
         ),
+        faithfulness_checked=faithfulness.checked,
+        faithfulness_score=faithfulness.score,
+        faithfulness_passed=faithfulness.passed,
+        citations_valid=citation_audit.all_valid,
+        orphan_citations=citation_audit.orphan_numbers,
+        trustworthy=trustworthy,
     )

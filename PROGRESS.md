@@ -1,6 +1,6 @@
 # RAG Production-Grade App — Progress & Handoff
 
-> **Version:** v0.8 &nbsp;|&nbsp; **Last updated:** 2026-06-19
+> **Version:** v0.9 &nbsp;|&nbsp; **Last updated:** 2026-06-19
 >
 > **Purpose:** Single source of truth for project status. If starting a new
 > Claude Code / chat session, say: *"Read PROGRESS.md and continue from there."*
@@ -32,8 +32,8 @@ Rerank v3.5 · LangChain · structlog · pytest.
 | 5 | Retrieval Strategy | ✅ Done | Dense + BM25 hybrid, RRF (k=60), MMR |
 | 6 | Reranking (Cohere v3.5) | ✅ Done | RERANK_FETCH_K=50, top_k=5 |
 | 7 | Context Assembly | ✅ Done | Token budget (tiktoken) + `[N]` citations. **19 tests pass.** |
-| 8 | Generation Layer (LLM) | ✅ Done | `/api/v1/ask` live & tested. **NOT yet committed.** |
-| 9 | Grounding & Hallucination Control | 🟡 Partial | Grounding **gate** live (threshold). Need: faithfulness judge + citation enforcement |
+| 8 | Generation Layer (LLM) | ✅ Done | `/api/v1/ask` live & tested |
+| 9 | Grounding & Hallucination Control | ✅ Done | 3-tier defense: grounding gate + claim-level faithfulness judge + citation enforcement. **14 tests.** |
 | 10 | Evaluation Framework (RAGAS) | 🔴 Not started | |
 | 11 | Security & Access Control | 🔴 Not started | ACL, PII redaction, prompt-injection defense |
 | 12 | Observability | 🟡 ~40% | structlog only. Need: Langfuse/LangSmith, cost, dashboards |
@@ -55,6 +55,8 @@ LLM_MODEL           = gpt-4o-mini
 MAX_CONTEXT_TOKENS  = 6000
 MAX_COMPLETION_TOKENS = 1024
 LLM_TEMPERATURE     = 0.0
+FAITHFULNESS_CHECK_ENABLED = true
+FAITHFULNESS_THRESHOLD     = 0.85   # >=0.85 baseline for regulated envs, >0.9 target
 ```
 
 ---
@@ -66,12 +68,20 @@ LLM_TEMPERATURE     = 0.0
 - `app/generation/context_assembler.py`
 - `tests/generation/test_context_assembler.py` (19 tests)
 
-**Section 8 (⚠️ NOT committed — in working tree):**
+**Section 8 (committed):**
 - `app/generation/llm.py` — provider-swappable LLM wrapper, retry/backoff, typed errors, token tracking
 - `app/services/ask_service.py` — pipeline orchestrator (retrieve → ground → assemble → generate)
 - `app/api/ask_api.py` — `POST /api/v1/ask` endpoint, HTTP error mapping
-- `app/config/settings.py` — added LLM + grounding config (modified)
-- `app/main.py` — registered ask_router (modified)
+- `app/config/settings.py` — LLM + grounding config
+- `app/main.py` — registered ask_router
+
+**Section 9 (committed):**
+- `app/generation/grounding.py` — `enforce_citations()` (programmatic) + `check_faithfulness()` (claim-level LLM-as-judge)
+- `app/generation/llm.py` — added `run_judge()` provider-agnostic helper (modified)
+- `app/services/ask_service.py` — wired Stage 5 verification + trustworthy verdict (modified)
+- `app/api/ask_api.py` — added faithfulness/trust response fields (modified)
+- `app/config/settings.py` — FAITHFULNESS_* config (modified)
+- `tests/generation/test_grounding.py` — 14 deterministic tests
 
 ---
 
@@ -90,11 +100,16 @@ LLM_TEMPERATURE     = 0.0
 
 ## 6. Next Step
 
-**Section 9 — complete Grounding & Hallucination Control.** Builds on the grounding
-gate already in `ask_service.py`. Add:
-1. Faithfulness check (LLM-as-judge: does the answer match cited chunks?)
-2. Citation enforcement (parse `[N]` tags, verify each maps to a retrieved chunk)
-3. Track "unanswerable" rate as a metric
+**Section 10 — Evaluation Framework (RAGAS).** Offline, batch quality measurement
+(distinct from Section 9's per-request runtime guardrails). Build:
+1. Integrate RAGAS metrics: faithfulness, answer_relevancy, context_precision, context_recall
+2. Small eval dataset (20–50 Q/A pairs)
+3. `python scripts/eval.py` runnable script
+4. (Optional) CI gate failing the build if metrics regress below threshold
+   (>=0.85 faithfulness, >0.85 answer relevancy, >0.8 context precision)
+
+Note: Section 9 deliberately left faithfulness *quality* testing to here —
+deterministic code → unit tests, LLM-dependent quality → evals.
 
 ---
 
@@ -102,6 +117,7 @@ gate already in `ask_service.py`. Add:
 
 | Date | Version | Change |
 |------|---------|--------|
+| 2026-06-19 | v0.9 | Section 9 (Grounding & Hallucination Control) — 3-tier defense: grounding gate + claim-level faithfulness judge + citation enforcement; +14 tests (33 total); new `trustworthy`/faithfulness fields on /ask |
 | 2026-06-19 | v0.8 | Section 8 (Generation Layer) built & live-tested; grounding threshold tuned to 0.05; PROGRESS.md created |
 | (earlier) | v0.7 | Section 7 (Context Assembler) + 19 tests committed |
 | (earlier) | v0.6 | Sections 1–6 complete (ingestion → retrieval → rerank) |
