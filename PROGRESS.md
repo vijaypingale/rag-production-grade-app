@@ -1,6 +1,6 @@
 # RAG Production-Grade App — Progress & Handoff
 
-> **Version:** v0.10 &nbsp;|&nbsp; **Last updated:** 2026-06-21
+> **Version:** v0.11 &nbsp;|&nbsp; **Last updated:** 2026-06-21
 >
 > **Purpose:** Single source of truth for project status. If starting a new
 > Claude Code / chat session, say: *"Read PROGRESS.md and continue from there."*
@@ -40,7 +40,7 @@ Rerank v3.5 · **LangChain 0.3.x (stable, pinned)** · RAGAS 0.2.15 · structlog
 | 7 | Context Assembly | ✅ Done | Token budget (tiktoken) + `[N]` citations. **19 tests pass.** |
 | 8 | Generation Layer (LLM) | ✅ Done | `/api/v1/ask` live & tested |
 | 9 | Grounding & Hallucination Control | ✅ Done | 3-tier defense: grounding gate + claim-level faithfulness judge + citation enforcement. **14 tests.** |
-| 10 | Evaluation Framework (RAGAS) | ✅ Done | Real RAGAS 0.2.15 on stable langchain 0.3.x. 4 metrics, gold set (8 Q incl. exhaustive-recall demo), `scripts/eval.py` CI gate. Latest: faith 0.90 / relevancy 0.90 / precision 0.98 / recall 0.88 |
+| 10 | Evaluation Framework (RAGAS) | ✅ Done | Real RAGAS 0.2.15 on stable langchain 0.3.x. **Stratified 70-Q gold set** across 6 categories + routing harness (RAGAS for answerable, behavioral checks for out-of-scope/adversarial/ambiguous). `scripts/eval.py` with `--max`/`--category` flags, CI gate |
 | 11 | Security & Access Control | 🔴 Not started | ACL, PII redaction, prompt-injection defense |
 | 12 | Observability | 🟡 ~40% | structlog only. Need: Langfuse/LangSmith, cost, dashboards |
 | 13 | Caching & Performance | 🔴 Not started | Semantic query cache, embedding cache |
@@ -98,10 +98,19 @@ EVAL context_recall    =  report-only (corpus-dependent)
 **Section 10:**
 - `app/evaluation/ragas_eval.py` — RAGAS wrapper: builds EvaluationDataset, runs
   4 metrics via our own LLM/embeddings (LangchainLLMWrapper)
-- `data/eval/wiser_eval_set.json` — 8 gold Q&A pairs (incl. exhaustive-recall demo)
-- `scripts/eval.py` — runnable eval + CI gate (`python scripts/eval.py`)
+- `app/evaluation/behavioral.py` — behavioral checks (abstain / resist / no-hallucination)
+- `data/eval/wiser_eval_set.json` — **70 stratified gold questions** across 6 categories
+  (30 happy_path, 10 edge, 7 multi_hop, 8 out_of_scope, 8 adversarial, 7 ambiguous)
+- `scripts/eval.py` — routing harness + CI gate; `--max N` (per-category cap) and
+  `--category X` flags for quick runs
 - `app/services/ask_service.py` — added `retrieved_contexts` to AskResult (modified)
 - `requirements.txt` — pinned langchain 0.3.x stack + ragas (modified)
+
+Category eval-type routing:
+- happy_path / edge / multi_hop  -> RAGAS (needs reference answer)
+- out_of_scope -> behavioral: must abstain
+- adversarial  -> behavioral: must resist (canary string absent from answer)
+- ambiguous    -> behavioral: must not hallucinate (abstain or stay faithful)
 
 ---
 
@@ -137,6 +146,7 @@ real patterns):
 
 | Date | Version | Change |
 |------|---------|--------|
+| 2026-06-21 | v0.11 | Section 10 expanded — stratified 70-Q gold set across 6 categories + routing harness (`app/evaluation/behavioral.py`): RAGAS for answerable, behavioral checks (abstain/resist/no-hallucination) for out-of-scope/adversarial/ambiguous; eval.py `--max`/`--category` flags. Smoke run (1/category) passed |
 | 2026-06-21 | v0.10 | Section 10 (Evaluation, RAGAS) — pinned langchain to stable 0.3.x to enable RAGAS 0.2.15; 4 metrics + gold set (8 Q incl. exhaustive-recall demo) + `scripts/eval.py` CI gate; added `retrieved_contexts` to AskResult. Exhaustive "list all codes" Q demonstrates context_recall drop (1.0→0.875) |
 | 2026-06-19 | v0.9 | Section 9 (Grounding & Hallucination Control) — 3-tier defense: grounding gate + claim-level faithfulness judge + citation enforcement; +14 tests (33 total); new `trustworthy`/faithfulness fields on /ask |
 | 2026-06-19 | v0.8 | Section 8 (Generation Layer) built & live-tested; grounding threshold tuned to 0.05; PROGRESS.md created |
