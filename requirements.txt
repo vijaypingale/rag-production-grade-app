@@ -58,6 +58,13 @@ rank-bm25                      # BM25 sparse retriever (for hybrid retrieval)
 cohere                         # Cohere Rerank v3 reranker client
 
 # =========================================================
+# Observability (Section 12)
+# =========================================================
+opentelemetry-api              # vendor-neutral tracing API
+opentelemetry-sdk              # tracer provider + console exporter
+# opentelemetry-exporter-otlp  # uncomment for Step 2 (Datadog/Grafana OTLP export)
+
+# =========================================================
 # Testing
 # =========================================================
 pytest                         # unit tests (deterministic components)

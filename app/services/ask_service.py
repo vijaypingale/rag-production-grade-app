@@ -53,6 +53,9 @@ from app.config.settings import (
     FAITHFULNESS_CHECK_ENABLED,
     FAITHFULNESS_THRESHOLD,
 )
+from app.observability.tracing import get_tracer
+from app.observability.cost import compute_cost
+from opentelemetry.trace import Status, StatusCode
 from app.utils.logger import logger
 
 
@@ -220,6 +223,61 @@ def _check_grounding(reranked_chunks: list[dict]) -> tuple[bool, float]:
 # =========================================================
 
 def ask(
+    query: str,
+    top_k: Optional[int] = None,
+    metadata_filter: Optional[dict] = None,
+    max_context_tokens: Optional[int] = None,
+) -> AskResult:
+    """
+    Observability wrapper (Section 12) around the RAG pipeline.
+
+    Creates one OpenTelemetry span per request ("rag.ask") and records the
+    key metrics as span attributes — cost, tokens, faithfulness, latency,
+    trustworthiness. This is vendor-neutral: the same span exports to console
+    (local) or Datadog/Grafana (prod) depending only on OTEL_EXPORTER.
+
+    All pipeline logic lives in _ask_impl(); this wrapper just instruments it.
+    """
+    tracer = get_tracer()
+
+    with tracer.start_as_current_span("rag.ask") as span:
+        span.set_attribute("rag.query", query[:500])
+        span.set_attribute("rag.top_k", top_k or RERANK_TOP_K)
+
+        try:
+            result = _ask_impl(
+                query=query,
+                top_k=top_k,
+                metadata_filter=metadata_filter,
+                max_context_tokens=max_context_tokens,
+            )
+        except Exception as exc:
+            # Mark the span as errored so it shows red in the backend UI.
+            span.record_exception(exc)
+            span.set_status(Status(StatusCode.ERROR, str(exc)))
+            raise
+
+        # Record outcome metrics as span attributes (what dashboards chart).
+        cost = compute_cost(
+            result.model_used, result.prompt_tokens, result.completion_tokens
+        )
+        span.set_attribute("rag.grounded", result.grounded)
+        span.set_attribute("rag.trustworthy", result.trustworthy)
+        span.set_attribute("rag.chunks_used", result.chunks_used)
+        span.set_attribute("rag.prompt_tokens", result.prompt_tokens)
+        span.set_attribute("rag.completion_tokens", result.completion_tokens)
+        span.set_attribute("rag.total_tokens", result.total_tokens)
+        span.set_attribute("rag.cost_usd", cost)
+        span.set_attribute("rag.faithfulness_score", result.faithfulness_score)
+        span.set_attribute("rag.citations_valid", result.citations_valid)
+        span.set_attribute("rag.latency.retrieval_ms", result.latency.retrieval_ms)
+        span.set_attribute("rag.latency.generation_ms", result.latency.generation_ms)
+        span.set_attribute("rag.latency.total_ms", result.latency.total_ms)
+
+        return result
+
+
+def _ask_impl(
     query: str,
     top_k: Optional[int] = None,
     metadata_filter: Optional[dict] = None,

@@ -381,3 +381,38 @@ FAITHFULNESS_CHECK_ENABLED = os.getenv(
 ).lower() == "true"
 
 FAITHFULNESS_THRESHOLD = float(os.getenv("FAITHFULNESS_THRESHOLD", "0.85"))
+
+
+# =========================================================
+# Observability — OpenTelemetry (Section 12)
+# =========================================================
+# We instrument the pipeline with OpenTelemetry (vendor-neutral) so the
+# SAME instrumentation can export to ANY backend by changing only the
+# exporter — console for local dev, Datadog/Grafana in production.
+#
+# OTEL_ENABLED:
+#   Master switch. When false, instrumentation is a no-op (zero overhead),
+#   so tests and offline scripts aren't affected.
+# OTEL_EXPORTER:
+#   "console" -> print spans to stdout (safe local dev, no account/cost)
+#   "otlp"    -> send to an OTLP endpoint (Datadog Agent, Grafana, etc.)
+# OTEL_SERVICE_NAME:
+#   Logical service name shown in the backend UI.
+
+OTEL_ENABLED = os.getenv("OTEL_ENABLED", "true").lower() == "true"
+OTEL_EXPORTER = os.getenv("OTEL_EXPORTER", "console")   # console | otlp
+OTEL_SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "rag-production-app")
+
+
+# =========================================================
+# Model Pricing (for cost-per-query tracking)
+# =========================================================
+# USD per 1,000,000 tokens. Used to compute cost from token usage so
+# observability can report cost-per-query. Update when provider prices
+# change. (gpt-4o-mini / text-embedding-3-small list prices.)
+
+MODEL_PRICING_PER_1M = {
+    "gpt-4o-mini":            {"input": 0.15,  "output": 0.60},
+    "gpt-4o":                 {"input": 2.50,  "output": 10.00},
+    "text-embedding-3-small": {"input": 0.02,  "output": 0.00},
+}
