@@ -1,6 +1,6 @@
 # RAG Production-Grade App — Progress & Handoff
 
-> **Version:** v0.12 &nbsp;|&nbsp; **Last updated:** 2026-06-21
+> **Version:** v0.13 &nbsp;|&nbsp; **Last updated:** 2026-06-22
 >
 > **Purpose:** Single source of truth for project status. If starting a new
 > Claude Code / chat session, say: *"Read PROGRESS.md and continue from there."*
@@ -42,7 +42,7 @@ Rerank v3.5 · **LangChain 0.3.x (stable, pinned)** · RAGAS 0.2.15 · structlog
 | 9 | Grounding & Hallucination Control | ✅ Done | 3-tier defense: grounding gate + claim-level faithfulness judge + citation enforcement. **14 tests.** |
 | 10 | Evaluation Framework (RAGAS) | ✅ Done | Real RAGAS 0.2.15 on stable langchain 0.3.x. **Stratified 70-Q gold set** across 6 categories + routing harness (RAGAS for answerable, behavioral checks for out-of-scope/adversarial/ambiguous). `scripts/eval.py` with `--max`/`--category` flags, CI gate |
 | 11 | Security & Access Control | 🔴 Not started | ACL, PII redaction, prompt-injection defense |
-| 12 | Observability | 🟡 ~70% | structlog + **OpenTelemetry tracing (Step 1 done)**: per-request `rag.ask` span with cost-per-query, tokens, faithfulness, trust, latency attrs. Console exporter (vendor-neutral). **Step 2 (Datadog OTLP export) pending** — needs free Datadog account |
+| 12 | Observability | ✅ Done | structlog + **OpenTelemetry tracing**: per-request `rag.ask` span (cost-per-query, tokens, faithfulness, trust, latency). Vendor-neutral OTLP — **verified live in Datadog APM** (app → OTel → Datadog Agent → cloud). Flips to console/Grafana/Jaeger via one env var |
 | 13 | Caching & Performance | 🔴 Not started | Semantic query cache, embedding cache |
 | 14 | Feedback Loop | 🔴 Not started | `/api/v1/feedback` endpoint |
 | 15 | Infrastructure & Deployment | 🟡 ~10% | Folder skeleton only. Need: Docker, CI, .env.example |
@@ -137,21 +137,26 @@ Category eval-type routing:
 
 ## 6. Next Step
 
-> **Section order was re-prioritized:** 12 Observability → 13 Caching → 14 Feedback
-> → 15 Deployment → 11 Security (deferred — "owned by a dedicated security engineer")
-> → 16 Agentic (optional).
+> **Section order was re-prioritized:** 12 Observability ✅ → **13 Caching (next)** →
+> 14 Feedback → 15 Deployment → 11 Security (deferred — "owned by a dedicated
+> security engineer") → 16 Agentic (optional).
 
-**Section 12 — Step 2: export to Datadog.** Step 1 (OpenTelemetry instrumentation
-with console exporter) is DONE. Step 2 when a free Datadog account is ready:
-1. `pip install opentelemetry-exporter-otlp`
-2. Set `OTEL_EXPORTER=otlp` + Datadog OTLP endpoint/API-key env vars
-3. View the `rag.ask` spans (cost, latency, faithfulness) in the Datadog UI
-4. Guard against Datadog's premium LLM-Observability auto-billing (~$120/day)
+**Section 13 — Caching & Performance.** Build (simple but real patterns):
+1. Semantic query cache — embed the query; if cosine sim > ~0.97 to a cached
+   query, return the cached answer (skip retrieval+LLM)
+2. Embedding cache — hash chunk content → reuse embeddings across re-ingestions
+3. Redis (preferred) or in-memory dict for dev
+4. Cache TTL: queries ~24h, embeddings ~forever
+5. Emit cache-hit/miss as OTel attributes (feeds Section 12 dashboards)
 
-Optional enhancement: add child spans per stage (retrieval → generate →
-faithfulness) for a waterfall trace.
+### Datadog (Section 12) — how to run it locally
+- Datadog Agent installed on Windows; OTLP receiver enabled in `datadog.yaml`
+  (ports 4317/4318); valid API key in the AGENT (not in `.env`).
+- App sends when `OTEL_EXPORTER=otlp` (now set in `.env`). Traces appear in
+  Datadog **APM → Traces** as service `rag-production-app`, operation `rag.ask`.
+- Optional future enhancement: child spans per stage for a waterfall trace.
 
-After Section 12: 13 Caching → 14 Feedback → 15 Deployment → 11 Security → 16 Agentic.
+After Section 13: 14 Feedback → 15 Deployment → 11 Security → 16 Agentic.
 
 ---
 
@@ -159,6 +164,7 @@ After Section 12: 13 Caching → 14 Feedback → 15 Deployment → 11 Security �
 
 | Date | Version | Change |
 |------|---------|--------|
+| 2026-06-22 | v0.13 | Section 12 COMPLETE — OTLP export verified live in Datadog APM (app → OTel → Datadog Agent → cloud); 4 `rag.ask` spans confirmed in UI. requirements: uncommented opentelemetry-exporter-otlp; .env: OTEL_EXPORTER=otlp. (Datadog API key lives in the agent, not .env.) |
 | 2026-06-21 | v0.12 | Section 12 Step 1 (Observability) — OpenTelemetry tracing via `app/observability/` (tracing.py + cost.py); `ask()` wrapped in `rag.ask` span with cost-per-query/tokens/faithfulness/latency attrs; console exporter (vendor-neutral, flips to Datadog by one env var); OTEL_ENABLED no-op keeps 48 tests green. Reordered roadmap (Security deferred) |
 | 2026-06-21 | v0.11 | Section 10 expanded — stratified 70-Q gold set across 6 categories + routing harness (`app/evaluation/behavioral.py`): RAGAS for answerable, behavioral checks (abstain/resist/no-hallucination) for out-of-scope/adversarial/ambiguous; eval.py `--max`/`--category` flags. Smoke run (1/category) passed |
 | 2026-06-21 | v0.10 | Section 10 (Evaluation, RAGAS) — pinned langchain to stable 0.3.x to enable RAGAS 0.2.15; 4 metrics + gold set (8 Q incl. exhaustive-recall demo) + `scripts/eval.py` CI gate; added `retrieved_contexts` to AskResult. Exhaustive "list all codes" Q demonstrates context_recall drop (1.0→0.875) |

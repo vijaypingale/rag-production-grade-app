@@ -62,7 +62,7 @@ cohere                         # Cohere Rerank v3 reranker client
 # =========================================================
 opentelemetry-api              # vendor-neutral tracing API
 opentelemetry-sdk              # tracer provider + console exporter
-# opentelemetry-exporter-otlp  # uncomment for Step 2 (Datadog/Grafana OTLP export)
+opentelemetry-exporter-otlp    # OTLP export (Step 2) → Datadog Agent / Grafana / Jaeger
 
 # =========================================================
 # Testing
