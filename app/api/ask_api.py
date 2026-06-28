@@ -160,6 +160,9 @@ class AskResponse(BaseModel):
     faithfulness_score:   float      = 0.0
     faithfulness_passed:  bool       = False
 
+    # Section 13 — True if served from the semantic cache (no retrieval/LLM)
+    cache_hit:            bool       = False
+
 
 # ============================================================================
 # Conversion helper
@@ -198,6 +201,7 @@ def _build_response(result: AskResult) -> AskResponse:
         faithfulness_checked=result.faithfulness_checked,
         faithfulness_score=result.faithfulness_score,
         faithfulness_passed=result.faithfulness_passed,
+        cache_hit=result.cache_hit,
     )
 
 

@@ -1,6 +1,6 @@
 # RAG Production-Grade App — Progress & Handoff
 
-> **Version:** v0.13 &nbsp;|&nbsp; **Last updated:** 2026-06-22
+> **Version:** v0.14 &nbsp;|&nbsp; **Last updated:** 2026-06-28
 >
 > **Purpose:** Single source of truth for project status. If starting a new
 > Claude Code / chat session, say: *"Read PROGRESS.md and continue from there."*
@@ -43,7 +43,7 @@ Rerank v3.5 · **LangChain 0.3.x (stable, pinned)** · RAGAS 0.2.15 · structlog
 | 10 | Evaluation Framework (RAGAS) | ✅ Done | Real RAGAS 0.2.15 on stable langchain 0.3.x. **Stratified 70-Q gold set** across 6 categories + routing harness (RAGAS for answerable, behavioral checks for out-of-scope/adversarial/ambiguous). `scripts/eval.py` with `--max`/`--category` flags, CI gate |
 | 11 | Security & Access Control | 🔴 Not started | ACL, PII redaction, prompt-injection defense |
 | 12 | Observability | ✅ Done | structlog + **OpenTelemetry tracing**: per-request `rag.ask` span (cost-per-query, tokens, faithfulness, trust, latency). Vendor-neutral OTLP — **verified live in Datadog APM** (app → OTel → Datadog Agent → cloud). Flips to console/Grafana/Jaeger via one env var |
-| 13 | Caching & Performance | 🔴 Not started | Semantic query cache, embedding cache |
+| 13 | Caching & Performance | ✅ Done (in-memory) | Semantic query cache (embed → cosine ≥ 0.92 → HIT). Interface + InMemory backend (dev) + RedisVL backend (prod, code-ready). Wired into `ask()`, `cache_hit` field/span. **11 tests; demoed live** (17s→0ms on hit). Redis wiring pending |
 | 14 | Feedback Loop | 🔴 Not started | `/api/v1/feedback` endpoint |
 | 15 | Infrastructure & Deployment | 🟡 ~10% | Folder skeleton only. Need: Docker, CI, .env.example |
 | 16 | Agentic Capabilities (optional) | 🔴 Not started | Web-search fallback, multi-step reasoning |
@@ -137,17 +137,21 @@ Category eval-type routing:
 
 ## 6. Next Step
 
-> **Section order was re-prioritized:** 12 Observability ✅ → **13 Caching (next)** →
-> 14 Feedback → 15 Deployment → 11 Security (deferred — "owned by a dedicated
-> security engineer") → 16 Agentic (optional).
+> **Section order was re-prioritized:** 12 Observability ✅ → 13 Caching ✅ →
+> **14 Feedback (next)** → 15 Deployment → 11 Security (deferred — "owned by a
+> dedicated security engineer") → 16 Agentic (optional).
 
-**Section 13 — Caching & Performance.** Build (simple but real patterns):
-1. Semantic query cache — embed the query; if cosine sim > ~0.97 to a cached
-   query, return the cached answer (skip retrieval+LLM)
-2. Embedding cache — hash chunk content → reuse embeddings across re-ingestions
-3. Redis (preferred) or in-memory dict for dev
-4. Cache TTL: queries ~24h, embeddings ~forever
-5. Emit cache-hit/miss as OTel attributes (feeds Section 12 dashboards)
+**Section 14 — Feedback Loop.** Build:
+1. `POST /api/v1/feedback` accepting `{query_id, rating: up|down, comment}`
+2. Failed-query log → JSON-lines file (review to find retrieval gaps; grows the eval set)
+3. Surface aggregate stats via observability
+
+### Section 13 follow-ups (when wiring Redis)
+- `pip install redisvl redis`; set `CACHE_BACKEND=redis` + `REDIS_URL` (+ run Redis).
+  HNSW indexing + TTL come via RedisVL; set `maxmemory` + `maxmemory-policy allkeys-lru`
+  on the Redis server for eviction; enable RDB/AOF for persistence.
+- Cache invalidation on document re-ingestion (flush stale entries) as a freshness safeguard.
+- Optional `GET /api/v1/cache/stats` debug endpoint to inspect the in-memory cache.
 
 ### Datadog (Section 12) — how to run it locally
 - Datadog Agent installed on Windows; OTLP receiver enabled in `datadog.yaml`
@@ -164,6 +168,7 @@ After Section 13: 14 Feedback → 15 Deployment → 11 Security → 16 Agentic.
 
 | Date | Version | Change |
 |------|---------|--------|
+| 2026-06-28 | v0.14 | Section 13 (Caching) — semantic query cache: `app/caching/semantic_cache.py` (BaseSemanticCache interface + InMemory backend for dev/tests + RedisVL backend for prod). Wired into `ask()` (lookup before, store after; only default-scope + trustworthy answers cached); `cache_hit` field + `rag.cache_hit` span; `cache_hit` in API response. +11 tests (70 total). Demoed live: 17s→0ms on hit, semantic match across different phrasings. Redis backend code-ready but not yet run live |
 | 2026-06-22 | v0.13 | Section 12 COMPLETE — OTLP export verified live in Datadog APM (app → OTel → Datadog Agent → cloud); 4 `rag.ask` spans confirmed in UI. requirements: uncommented opentelemetry-exporter-otlp; .env: OTEL_EXPORTER=otlp. (Datadog API key lives in the agent, not .env.) |
 | 2026-06-21 | v0.12 | Section 12 Step 1 (Observability) — OpenTelemetry tracing via `app/observability/` (tracing.py + cost.py); `ask()` wrapped in `rag.ask` span with cost-per-query/tokens/faithfulness/latency attrs; console exporter (vendor-neutral, flips to Datadog by one env var); OTEL_ENABLED no-op keeps 48 tests green. Reordered roadmap (Security deferred) |
 | 2026-06-21 | v0.11 | Section 10 expanded — stratified 70-Q gold set across 6 categories + routing harness (`app/evaluation/behavioral.py`): RAGAS for answerable, behavioral checks (abstain/resist/no-hallucination) for out-of-scope/adversarial/ambiguous; eval.py `--max`/`--category` flags. Smoke run (1/category) passed |

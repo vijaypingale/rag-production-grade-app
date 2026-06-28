@@ -416,3 +416,35 @@ MODEL_PRICING_PER_1M = {
     "gpt-4o":                 {"input": 2.50,  "output": 10.00},
     "text-embedding-3-small": {"input": 0.02,  "output": 0.00},
 }
+
+
+# =========================================================
+# Semantic Cache (Section 13)
+# =========================================================
+# Cache LLM answers keyed by the query's MEANING (its embedding), not its
+# exact text. A new query that is semantically close to a past one (cosine
+# similarity >= threshold) returns the cached answer in milliseconds and
+# skips retrieval + reranking + the LLM call — the expensive parts.
+#
+# CACHE_ENABLED:
+#   Master switch. When false, every query runs the full pipeline.
+# CACHE_BACKEND:
+#   "memory" -> in-process cache (works now, no infra; lost on restart,
+#               not shared across instances). Good for dev/demo.
+#   "redis"  -> RedisVL SemanticCache (shared, persistent) — production.
+# SEMANTIC_CACHE_THRESHOLD:
+#   Cosine similarity (0-1) a query must reach to count as a cache HIT.
+#   Industry guidance for factual/RAG: >= 0.92 (strict) so we never serve a
+#   cached answer to a subtly different question. Lower = more hits but more
+#   risk of wrong answers.
+# CACHE_TTL_SECONDS:
+#   How long a cached answer stays valid. 24h default — bounds staleness when
+#   source documents change (combined with cache-busting on re-ingestion).
+# REDIS_URL:
+#   Connection string used only when CACHE_BACKEND="redis".
+
+CACHE_ENABLED = os.getenv("CACHE_ENABLED", "true").lower() == "true"
+CACHE_BACKEND = os.getenv("CACHE_BACKEND", "memory")          # memory | redis
+SEMANTIC_CACHE_THRESHOLD = float(os.getenv("SEMANTIC_CACHE_THRESHOLD", "0.92"))
+CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "86400"))   # 24 hours
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")

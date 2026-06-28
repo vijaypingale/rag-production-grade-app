@@ -55,6 +55,7 @@ from app.config.settings import (
 )
 from app.observability.tracing import get_tracer
 from app.observability.cost import compute_cost
+from app.caching.semantic_cache import get_semantic_cache
 from opentelemetry.trace import Status, StatusCode
 from app.utils.logger import logger
 
@@ -136,6 +137,10 @@ class AskResult:
     # Raw retrieved chunk texts (used by Section 10 eval & observability).
     # Not exposed over the HTTP API — internal/eval use only.
     retrieved_contexts:   list[str]   = field(default_factory=list)
+
+    # Section 13 — True if this answer was served from the semantic cache
+    # (no retrieval/LLM call). Surfaced as an OTel attribute for cost dashboards.
+    cache_hit:            bool        = False
 
 
 # =========================================================
@@ -219,6 +224,57 @@ def _check_grounding(reranked_chunks: list[dict]) -> tuple[bool, float]:
 
 
 # =========================================================
+# Cache (de)serialization helpers (Section 13)
+# =========================================================
+# The semantic cache stores plain JSON-able dicts, so we convert AskResult
+# to/from a dict. We persist only the answer + provenance + quality fields —
+# NOT latency or retrieved_contexts (those are per-execution, not reusable).
+
+def _result_to_cache_payload(result: AskResult) -> dict:
+    return {
+        "answer":               result.answer,
+        "citations":            [c.__dict__ for c in result.citations],
+        "model_used":           result.model_used,
+        "provider":             result.provider,
+        "prompt_tokens":        result.prompt_tokens,
+        "completion_tokens":    result.completion_tokens,
+        "total_tokens":         result.total_tokens,
+        "chunks_used":          result.chunks_used,
+        "grounded":             result.grounded,
+        "faithfulness_checked": result.faithfulness_checked,
+        "faithfulness_score":   result.faithfulness_score,
+        "faithfulness_passed":  result.faithfulness_passed,
+        "citations_valid":      result.citations_valid,
+        "orphan_citations":     result.orphan_citations,
+        "trustworthy":          result.trustworthy,
+    }
+
+
+def _result_from_cache_payload(payload: dict) -> AskResult:
+    # Rebuild an AskResult from cache. Latency is ~0 (no work done) and
+    # cache_hit=True flags it so dashboards can separate cached vs. live.
+    return AskResult(
+        answer=payload["answer"],
+        citations=[CitationEntry(**c) for c in payload["citations"]],
+        model_used=payload["model_used"],
+        provider=payload["provider"],
+        prompt_tokens=payload["prompt_tokens"],
+        completion_tokens=payload["completion_tokens"],
+        total_tokens=payload["total_tokens"],
+        chunks_used=payload["chunks_used"],
+        grounded=payload["grounded"],
+        latency=LatencyBreakdown(0.0, 0.0, 0.0, 0.0),
+        faithfulness_checked=payload["faithfulness_checked"],
+        faithfulness_score=payload["faithfulness_score"],
+        faithfulness_passed=payload["faithfulness_passed"],
+        citations_valid=payload["citations_valid"],
+        orphan_citations=payload["orphan_citations"],
+        trustworthy=payload["trustworthy"],
+        cache_hit=True,
+    )
+
+
+# =========================================================
 # Public API
 # =========================================================
 
@@ -229,14 +285,17 @@ def ask(
     max_context_tokens: Optional[int] = None,
 ) -> AskResult:
     """
-    Observability wrapper (Section 12) around the RAG pipeline.
+    Observability (Section 12) + semantic cache (Section 13) wrapper around
+    the RAG pipeline.
 
-    Creates one OpenTelemetry span per request ("rag.ask") and records the
-    key metrics as span attributes — cost, tokens, faithfulness, latency,
-    trustworthiness. This is vendor-neutral: the same span exports to console
-    (local) or Datadog/Grafana (prod) depending only on OTEL_EXPORTER.
+    Flow:
+      1. Start an OpenTelemetry "rag.ask" span.
+      2. Semantic cache lookup — on HIT, return the cached answer immediately
+         (skips retrieval + LLM). Only default-scope queries are cached.
+      3. On MISS, run the full pipeline (_ask_impl), record metrics, and store
+         the answer for next time (only trustworthy answers are cached).
 
-    All pipeline logic lives in _ask_impl(); this wrapper just instruments it.
+    All pipeline logic lives in _ask_impl(); this wrapper adds caching + tracing.
     """
     tracer = get_tracer()
 
@@ -244,6 +303,28 @@ def ask(
         span.set_attribute("rag.query", query[:500])
         span.set_attribute("rag.top_k", top_k or RERANK_TOP_K)
 
+        # -------------------------------------------------
+        # Section 13: semantic cache lookup
+        # -------------------------------------------------
+        # We only cache DEFAULT-SCOPE queries (no metadata_filter, default
+        # top_k). A filtered/custom-k request can return different results, so
+        # serving it a generic cached answer would be wrong — a correctness
+        # safeguard. The cache key would otherwise need to include that scope.
+        cache = get_semantic_cache()
+        cacheable = cache is not None and metadata_filter is None and top_k is None
+
+        if cacheable:
+            cached_payload = cache.lookup(query)
+            if cached_payload is not None:
+                span.set_attribute("rag.cache_hit", True)
+                logger.info("ask_served_from_cache", query_preview=query[:200])
+                return _result_from_cache_payload(cached_payload)
+
+        span.set_attribute("rag.cache_hit", False)
+
+        # -------------------------------------------------
+        # Cache MISS -> run the full pipeline
+        # -------------------------------------------------
         try:
             result = _ask_impl(
                 query=query,
@@ -273,6 +354,15 @@ def ask(
         span.set_attribute("rag.latency.retrieval_ms", result.latency.retrieval_ms)
         span.set_attribute("rag.latency.generation_ms", result.latency.generation_ms)
         span.set_attribute("rag.latency.total_ms", result.latency.total_ms)
+
+        # -------------------------------------------------
+        # Section 13: store in cache (only trustworthy answers)
+        # -------------------------------------------------
+        # Caching a low-quality/ungrounded answer would serve it to future
+        # similar queries — so we only cache answers that passed grounding +
+        # faithfulness + citation checks.
+        if cacheable and result.trustworthy:
+            cache.store(query, _result_to_cache_payload(result))
 
         return result
 

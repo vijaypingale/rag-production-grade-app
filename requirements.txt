@@ -65,6 +65,14 @@ opentelemetry-sdk              # tracer provider + console exporter
 opentelemetry-exporter-otlp    # OTLP export (Step 2) → Datadog Agent / Grafana / Jaeger
 
 # =========================================================
+# Caching (Section 13)
+# =========================================================
+# In-memory backend (default) needs only numpy (already a dep).
+# Uncomment these for the Redis backend (CACHE_BACKEND=redis):
+# redisvl                      # RedisVL SemanticCache (HNSW + cosine + TTL)
+# redis                        # Redis client (RedisVL dependency)
+
+# =========================================================
 # Testing
 # =========================================================
 pytest                         # unit tests (deterministic components)
